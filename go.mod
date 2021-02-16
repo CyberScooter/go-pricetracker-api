@@ -3,6 +3,8 @@ module tracker-api-backend-go
 go 1.15
 
 require (
+	github.com/chromedp/cdproto v0.0.0-20210126020047-7ec7357d1463
+	github.com/chromedp/chromedp v0.6.5
 	github.com/dpapathanasiou/go-recaptcha v0.0.0-20190121160230-be5090b17804
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gorilla/mux v1.8.0
@@ -13,5 +15,6 @@ require (
 	github.com/tomogoma/generator v0.0.0-20171014125632-4398aab4dd41
 	github.com/tomogoma/go-api-guard v0.0.0-20180312041446-a2bad766ec64
 	github.com/tomogoma/go-typed-errors v0.0.0-20181222204503-0532faf740be
+	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c // indirect
 	gopkg.in/mail.v2 v2.3.1
 )

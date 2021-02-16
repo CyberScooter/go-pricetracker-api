@@ -1,101 +1,104 @@
-
 package tracker
 
 import (
-	"fmt"
-	"time"
-	"regexp"
+	"context"
+	"log"
+	// "time"
+	
 	"strings"
+	"fmt"
+	"regexp"
 	"strconv"
-	"tracker-api-backend-go/api/structs"
 
-	"github.com/tebeka/selenium"
-	"github.com/serge1peshcoff/selenium-go-conditions"
+	"tracker-api-backend-go/api/structs"
+	"github.com/chromedp/chromedp"
+	"github.com/chromedp/cdproto/cdp"
 )
 
+func Track(item string)[]structs.Product{
+	// create chrome instance
+	ctx, cancel := chromedp.NewContext(
+		context.Background(),
+		chromedp.WithLogf(log.Printf),
+		
+	)
+	defer cancel()
 
-/**
-* ? fix issue with random page being loaded when searching for product, it stops bot from progressing
-* *Temporary fix has been made, if product is still searching for more than a second then respond with not found
-* TODO: add headless and icognito capabilities
-* TODO: optimise it so its faster
+	// FIX THIS
 
-*/
+	// create a timeout
+	// ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
+	// defer cancel()
 
-func Track(item string) []structs.Product {
-// func main(){
-	// FireFox driver without specific version
-	caps := selenium.Capabilities{"browserName": "chrome"}
 
-	// chromeCaps := chrome.Capabilities{
-	// 	Path:  "",
-	// 	Args: []string{
-	// 		"--headless", // <<<
-	// 		"--no-sandbox",
-	// 	},
-	// }
-	// caps.AddChrome(chromeCaps)
 
-	wd, _ := selenium.NewRemote(caps, "")
-	defer wd.Quit()
+
+	// navigate to a page, wait for an element, click
+
+	var comparePrices []*cdp.Node
+	var links []string
+	err := chromedp.Run(ctx,
+		chromedp.Navigate(`http://google.com/search?q=` + item + `&tbm=shop&tbs=vw:g`),
+		// wait for footer element is visible (ie, page is loaded)
+		// chromedp.WaitVisible(`//a[@class='a3H7pd']`),
+		// find and click "Expand All" link
+		chromedp.Nodes(`//a[@class='a3H7pd']`, &comparePrices),
+
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	selectionNode := comparePrices[0]
+
+	if selectionNode == nil {
+		return []structs.Product{structs.Product{Found: false, Company: "", Currency: "", Review: "", Delivery: "", Price: 0.00, TotalPrice: 0.00, URL: ""}} 
+	}
+	// fmt.Println(selectionNode)
+
+	var nodes []*cdp.Node
+	var example string
+	if err := chromedp.Run(ctx,
+		chromedp.Click(selectionNode.AttributeValue("href")),
+		// chromedp.Click(`//a[@class='a3H7pd']`,chromedp.BySearch, chromedp.NodeVisible),
+
+		// retrieve the value of the textarea
+		// chromedp.WaitVisible(`#sh-osd__online-sellers-cont`),
+
+		chromedp.Text(`#sh-osd__online-sellers-cont`, &example, chromedp.NodeVisible, chromedp.ByID),
+		chromedp.Nodes("//a[@class='sh-osd__seller-link shntl']", &nodes),
+	
+	); err != nil {
+		panic(err)
+	}
+
+
+	// log.Printf("Go's time.After example:\n%s", example)
+	s := strings.Split(example, "Visit site")
+	regex, _ := regexp.Compile("(?m)^[ \t]*\r?\n")
+
+	for _, n := range nodes {
+		links = append(links, "https://www.google.com" + n.AttributeValue("href"))
+	}
+
+	for i,_ := range s {
+		s[i] = regex.ReplaceAllString(s[i], "")
+	}
 
 	items := make([]structs.Product, 0)
 
-	data := item
-
-	// Get simple playground interface
-	wd.Get("http://google.com/search?q=" +  data + "&tbm=shop&tbs=vw:g")
-
-	// dont need it
-	// wd.SwitchFrame(0)
-	// fr, _ := wd.FindElement(selenium.ByID, "introAgreeButton")
-	// fr.Click()
-
-	//"//*[text()='Get started free']"
-	//"//div[@class='C1iIFb IHk3ob']"
+	regexPercentagePostive, _ := regexp.Compile("[0-9]+% positive([(]([[0-9]+[,][0-9]+[,]*[0-9]*]*|[0-9]*)[)](\n.*?)*)")
+	regexPercentageNegative, _ := regexp.Compile("[0-9]+% negative([(]([[0-9]+[,][0-9]+[,]*[0-9]*]*|[0-9]*)[)](\n.*?)*)")
+	regexPricePound, _ := regexp.Compile("£([0-9]+).([0-9]+)")
+	regexPriceDollar, _ := regexp.Compile("$([0-9]+).([0-9]+)")
+	regexPriceEuro, _ := regexp.Compile("€([0-9]+).([0-9]+)")
+	regexFreeDelivery, _ := regexp.Compile("Free delivery")
 
 
-	if err := wd.WaitWithTimeout(conditions.ElementIsLocated(selenium.ByXPATH, "//a[@class='a3H7pd']"), 1*time.Second); err == nil {
+	// fmt.Println(s[0])
+	// fmt.Println(links)
 
-		topResult, error := wd.FindElement(selenium.ByXPATH, "//a[@class='a3H7pd']")
-		topResult.Click()
-		if error != nil {
-			panic(error)
-		}
-
-		topResult.Click()
-
-		// waiting till element is located before continuing
-		if err := wd.Wait(conditions.ElementIsLocated(selenium.ByID, "sh-osd__online-sellers-cont")); err == nil{
-			result, _ := wd.FindElement(selenium.ByID, "sh-osd__online-sellers-cont")
-			allResult, _ := result.Text()
-
-			// result, _ := wd.FindElement(selenium.ByID, "sh-osd__online-sellers-cont")
-
-			regexPercentagePostive, _ := regexp.Compile("[0-9]+% positive([(]([[0-9]+[,][0-9]+[,]*[0-9]*]*|[0-9]*)[)](\n.*?)*)")
-			regexPercentageNegative, _ := regexp.Compile("[0-9]+% negative([(]([[0-9]+[,][0-9]+[,]*[0-9]*]*|[0-9]*)[)](\n.*?)*)")
-			regexPricePound, _ := regexp.Compile("£([0-9]+).([0-9]+)")
-			regexPriceDollar, _ := regexp.Compile("$([0-9]+).([0-9]+)")
-			regexPriceEuro, _ := regexp.Compile("€([0-9]+).([0-9]+)")
-			regexFreeDelivery, _ := regexp.Compile("Free delivery")
-			
-			s := strings.Split(allResult, "Visit site")
-
-			for i := range s {
-				s[i] = strings.TrimSpace(s[i])
-			}
-
-
-			// TODO ADD LINKS FOR EACH PRODUCT
-			linksElements, _ := wd.FindElements(selenium.ByXPATH, "//a[@class='sh-osd__seller-link shntl']")
-			links := []string{}
-
-			for i := range linksElements {
-				link, _ := linksElements[i].GetAttribute("href")
-				links = append(links, link)
-			}
-
-			company, review, delivery, price, totalPrice, URL, currency := "", "", "", 0.00, 0.00, "", ""
+	company, review, delivery, price, totalPrice, URL, currency := "", "", "", 0.00, 0.00, "", ""
 
 			for i, v := range s {
 				description := strings.Split(v, "\n")
@@ -172,46 +175,8 @@ func Track(item string) []structs.Product {
 				}
 			}
 
-		// fmt.Println(items)
-
-		}
-
-
-	} else {
-		return []structs.Product{structs.Product{Found: false, Company: "", Currency: "", Review: "", Delivery: "", Price: 0.00, TotalPrice: 0.00, URL: ""}}
-	}
-	return items
+		return items
 
 
 
-    // regexPercentagePostive := "/[0-9]+% positive([(]([[0-9]+[,][0-9]+[,]*[0-9]*]*|[0-9]*)[)](\n.*?)*)/gi"
-    // regexPercentageNegative := "/[0-9]+% negative([(]([[0-9]+[,][0-9]+[,]*[0-9]*]*|[0-9]*)[)](\n.*?)*)/gi"
-    // regexPrice := "/£[0-9]+.([0-9](\n.*?)*)+/gi"
-    // regexFreeDelivery := "/Free delivery+/gi"
-
-	
-
-	// // Enter code in textarea
-	// elem, _ := wd.FindElement(selenium.ByCSSSelector, "#code")
-	// elem.Clear()
-	// // elem.SendKeys(code)
-
-	// // Click the run button
-	// btn, _ := wd.FindElement(selenium.ByCSSSelector, "#run")
-	// btn.Click()
-
-	// // Get the result
-	// div, _ := wd.FindElement(selenium.ByCSSSelector, "#output")
-
-	// output := ""
-	// // Wait for run to finish
-	// for {
-	// 	output, _ = div.Text()
-	// 	if output != "Waiting for remote server..." {
-	// 		break
-	// 	}
-	// 	time.Sleep(time.Millisecond * 100)
-	// }
-
-	// fmt.Printf("Got: %s\n", output)
 }

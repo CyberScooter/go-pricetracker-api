@@ -22,14 +22,23 @@ import (
 
 )
 
-
 var emailRegex = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+\\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
-
 
 type Message struct {
 	Email   string
 	Content string
-  }
+}
+
+type UserAPI struct {
+	Email   string    `json:"email"`
+    APIKey string `json:"apiKey"`
+}
+
+// Define our struct
+type authenticationMiddleware struct {
+	tokenUsers map[string]string
+}
+
 
 var db *sql.DB
 
@@ -57,16 +66,6 @@ func (msg *Message) Deliver() error {
   
 	return mail.NewDialer("smtp.gmail.com", 587, username, password).DialAndSend(email)
   }  
-
-// Define our struct
-type authenticationMiddleware struct {
-	tokenUsers map[string]string
-}
-
-type UserAPI struct {
-	Email   string    `json:"email"`
-    APIKey string `json:"apiKey"`
-}
 
 // Initialize it somewhere
 // runs every 5 minutes
@@ -157,16 +156,32 @@ func priceTrackerAPIHandler(w http.ResponseWriter, r *http.Request){
 
 
 	if name != "" {
-		var items []structs.Product = tracker.Track(name)
-		if(items[0].Found == true){
+		c1 := make(chan []structs.Product, 1)
+		go func() {
+			c1 <- tracker.Track(name)
+		}()
+
+		select {
+		case res := <-c1:
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(items)
-		}else {
-			// w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(res)
+		case <-time.After(6 * time.Second):
 			w.WriteHeader(http.StatusNotFound)
 			http.Error(w, "Not found", 406)
 		}
+
+		// var items []structs.Product = tracker.Track(name)
+
+		// if(items[0].Found == true){
+		// 	w.Header().Set("Content-Type", "application/json")
+		// 	w.WriteHeader(http.StatusOK)
+		// 	json.NewEncoder(w).Encode(items)
+		// }else {
+		// 	// w.Header().Set("Content-Type", "application/json")
+		// 	w.WriteHeader(http.StatusNotFound)
+		// 	http.Error(w, "Not found", 406)
+		// }
 	}else {
 		w.WriteHeader(http.StatusNotFound)
 		http.Error(w, "No data entered, add '?item=' query string to the end", 406)
